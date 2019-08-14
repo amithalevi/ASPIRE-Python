@@ -1,7 +1,6 @@
 import os
 import pyfftw
 import mrcfile
-import finufftpy
 import importlib_resources
 
 import scipy.special as sp
@@ -705,6 +704,7 @@ def cryo_pft_nfft(projections, precomp):
     # import time
     # tic = time.time()
     pf = np.empty((x.shape[1], num_projections), dtype='complex128', order='F')
+    import finufftpy
     finufftpy.nufft2d2many(x[0], x[1], pf, -1, 1e-15, projections)
     # toc = time.time()
 
@@ -731,6 +731,7 @@ def test(im, freqs):
     yj = np.random.rand(nj) * 2 * np.pi - np.pi
 
     cj = np.zeros([nj], dtype=np.complex128)
+    import finufftpy
     finufftpy.nufft2d2(xj, yj, cj, -1, 1e-15, im)
 
     ref = nudft2(im, np.array([xj, yj]))
@@ -748,6 +749,7 @@ def test2(im, freqs):
     yj = freqs[1].copy()
 
     cj = np.empty([nj], dtype=np.complex128)
+    import finufftpy
     finufftpy.nufft2d2(xj, yj, cj, -1, 1e-15, im)
 
     ref = nudft2(im, np.array([xj, yj]))
@@ -768,6 +770,7 @@ def nudft2(im, freqs):
 def nufft2(im, freqs):
     freqs = np.mod(freqs + np.pi, 2 * np.pi) - np.pi
     out = np.empty(freqs.shape[1], dtype='complex128')
+    import finufftpy
     finufftpy.nufft2d2(freqs[0], freqs[1], out, -1, 1e-15, im)
     return out
 

@@ -1,5 +1,4 @@
 import numpy as np
-import finufftpy
 from aspire.nfft import Plan
 from aspire.utils import ensure
 
@@ -22,6 +21,7 @@ class FINufftPlan(Plan):
         self.epsilon = epsilon
 
         # Get a handle on the appropriate 1d/2d/3d forward transform function in finufftpy
+        import finufftpy
         self.transform_function = getattr(finufftpy, {1: 'nufft1d2', 2: 'nufft2d2', 3: 'nufft3d2'}[self.dim])
         # Get a handle on the appropriate 1d/2d/3d adjoint function in finufftpy
         self.adjoint_function = getattr(finufftpy, {1: 'nufft1d1', 2: 'nufft2d1', 3: 'nufft3d1'}[self.dim])
