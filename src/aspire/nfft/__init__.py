@@ -1,92 +1,61 @@
 import numpy as np
-from aspire.utils import ensure
+from finufftpy import nufft2d2, nufft3d2, nufft2d1, nufft3d1
 
 
-class Plan:
+def nufft3(vol_f, fourier_pts, sz=None, real=False):
+    if sz is None:
+        sz = vol_f.shape
 
-    def __init__(self, sz, fourier_pts, epsilon=1e-15):
-        """
-        A plan for non-uniform FFT (3D)
-        :param sz: A tuple indicating the geometry of the signal
-        :param fourier_pts: The points in Fourier space where the Fourier transform is to be calculated,
-            arranged as a 3-by-K array. These need to be in the range [-pi, pi] in each dimension.
-        :param epsilon: The desired precision of the NUFFT
-        """
-        self.sz = sz
-        self.dim = len(sz)
-        # TODO: Things get messed up unless we ensure a 'C' ordering here - investigate why
-        self.fourier_pts = np.asarray(np.mod(fourier_pts + np.pi, 2 * np.pi) - np.pi, order='C')
-        self.num_pts = fourier_pts.shape[1]
-        self.epsilon = epsilon
+    dim = len(sz)
+    if dim == 2:
+        fn = nufft2d2
+    elif dim == 3:
+        fn = nufft3d2
 
-        # Get a handle on the appropriate 1d/2d/3d forward transform function in finufftpy
-        import finufftpy
-        self.transform_function = getattr(finufftpy, {1: 'nufft1d2', 2: 'nufft2d2', 3: 'nufft3d2'}[self.dim])
-        # Get a handle on the appropriate 1d/2d/3d adjoint function in finufftpy
-        self.adjoint_function = getattr(finufftpy, {1: 'nufft1d1', 2: 'nufft2d1', 3: 'nufft3d1'}[self.dim])
+    epsilon = max(1e-15, np.finfo(vol_f.dtype).eps)
+    fourier_pts = np.asarray(np.mod(fourier_pts + np.pi, 2 * np.pi) - np.pi, order='C')
 
-    def transform(self, signal):
-        ensure(signal.shape == self.sz, f'Signal to be transformed must have shape {self.sz}')
+    num_pts = fourier_pts.shape[1]
+    result = np.zeros(num_pts).astype('complex128')
 
-        epsilon = max(self.epsilon, np.finfo(signal.dtype).eps)
+    result_code = fn(
+        *fourier_pts,
+        result,
+        -1,
+        epsilon,
+        vol_f
+    )
 
-        # Forward transform functions in finufftpy have signatures of the form:
-        # (x, y, z, c, isign, eps, f, ...)
-        # (x, y     c, isign, eps, f, ...)
-        # (x,       c, isign, eps, f, ...)
-        # Where f is a Fortran-order ndarray of the appropriate dimensions
-        # We form these function signatures here by tuple-unpacking
+    if result_code != 0:
+        raise RuntimeError(f'FINufft transform failed. Result code {result_code}')
 
-        result = np.zeros(self.num_pts).astype('complex128')
-
-        result_code = self.transform_function(
-            *self.fourier_pts,
-            result,
-            -1,
-            epsilon,
-            signal
-        )
-
-        if result_code != 0:
-            raise RuntimeError(f'FINufft transform failed. Result code {result_code}')
-
-        return result
-
-    def adjoint(self, signal):
-
-        epsilon = max(self.epsilon, np.finfo(signal.dtype).eps)
-
-        # Adjoint functions in finufftpy have signatures of the form:
-        # (x, y, z, c, isign, eps, ms, mt, mu, f, ...)
-        # (x, y     c, isign, eps, ms, mt      f, ...)
-        # (x,       c, isign, eps, ms,         f, ...)
-        # Where f is a Fortran-order ndarray of the appropriate dimensions
-        # We form these function signatures here by tuple-unpacking
-
-        # Note: Important to have order='F' here!
-        result = np.zeros(self.sz, order='F').astype('complex128')
-
-        result_code = self.adjoint_function(
-            *self.fourier_pts,
-            signal,
-            1,
-            epsilon,
-            *self.sz,
-            result
-        )
-        if result_code != 0:
-            raise RuntimeError(f'FINufft adjoint failed. Result code {result_code}')
-
-        return result
+    return np.real(result) if real else result
 
 
 def anufft3(vol_f, fourier_pts, sz, real=False):
-    plan = Plan(sz=sz, fourier_pts=fourier_pts)
-    adjoint = plan.adjoint(vol_f)
-    return np.real(adjoint) if real else adjoint
 
+    dim = len(sz)
+    if dim == 2:
+        fn = nufft2d1
+    elif dim == 3:
+        fn = nufft3d1
+    else:
+        raise RuntimeError('only 2d and 3d adjoints supported')
 
-def nufft3(vol_f, fourier_pts, sz, real=False):
-    plan = Plan(sz=sz, fourier_pts=fourier_pts)
-    transform = plan.transform(vol_f)
-    return np.real(transform) if real else transform
+    epsilon = max(1e-15, np.finfo(vol_f.dtype).eps)
+    fourier_pts = np.asarray(np.mod(fourier_pts + np.pi, 2 * np.pi) - np.pi, order='C')
+
+    result = np.zeros(sz, order='F').astype('complex128')
+
+    result_code = fn(
+        *fourier_pts,
+        vol_f,
+        1,
+        epsilon,
+        *sz,
+        result
+    )
+    if result_code != 0:
+        raise RuntimeError(f'FINufft adjoint failed. Result code {result_code}')
+
+    return np.real(result) if real else result

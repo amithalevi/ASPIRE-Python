@@ -1,8 +1,7 @@
 import numpy as np
 from unittest import TestCase
-from unittest.case import SkipTest
 
-from aspire.nfft import Plan
+from aspire.nfft import nufft3
 
 import os.path
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'saved_test_data')
@@ -24,8 +23,7 @@ class SimTestCase(TestCase):
             [-3.93035749861843, -3.36417300942290, -2.79798852022738, -2.23180403103185]
         ])
 
-        plan = Plan(vol.shape, fourier_pts)
-        result = plan.transform(vol)
+        result = nufft3(vol, fourier_pts)
 
         self.assertTrue(np.allclose(
             result,

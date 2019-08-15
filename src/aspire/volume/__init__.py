@@ -4,7 +4,7 @@ from aspire.utils import ensure
 from aspire.utils.coor_trans import grid_2d
 from aspire.utils.fft import centered_ifft2, centered_fft2
 from aspire.utils.matlab_compat import m_reshape, m_flatten
-from aspire.nfft import Plan
+from aspire.nfft import nufft3, anufft3
 
 
 class Volume:
@@ -57,7 +57,7 @@ def vol_project(vol, rot_matrices):
     # TODO: rotated_grids might as well give us correctly shaped array in the first place
     pts_rot = m_reshape(pts_rot, (3, L**2*n))
 
-    im_f = 1./L * Plan(vol.shape, pts_rot).transform(vol)
+    im_f = 1./L * nufft3(vol, pts_rot)
     im_f = m_reshape(im_f, (L, L, -1))
 
     if L % 2 == 0:
@@ -110,10 +110,6 @@ def im_backproject(im, rot_matrices):
         im_f[:, 0, :] = 0
     im_f = m_flatten(im_f)
 
-    plan = Plan(
-        sz=(L, L, L),
-        fourier_pts=pts_rot
-    )
-    vol = np.real(plan.adjoint(im_f)) / L
+    vol = anufft3(im_f, pts_rot, (L, L, L), real=True) / L
 
     return vol
