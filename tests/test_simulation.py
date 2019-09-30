@@ -34,7 +34,13 @@ class SimTestCase(TestCase):
             ])
         ))
 
+    def testSimulationRawProjections(self):
+        # Generate images without filters/shifts/amplitudes/noise
+        images = self.sim.images(0, 512, clean=True).asnumpy()
+        self.assertTrue(np.allclose(images, np.load(os.path.join(DATA_DIR, 'sim_clean_projections.npy')), rtol=1e-2))
+
     def testSimulationCleanImages(self):
+        # Generate images with filters/shifts/amplitudes, but without any added noise
         images = self.sim.images(0, 512).asnumpy()
         self.assertTrue(np.allclose(images, np.load(os.path.join(DATA_DIR, 'sim_clean_images.npy')), rtol=1e-2))
 
