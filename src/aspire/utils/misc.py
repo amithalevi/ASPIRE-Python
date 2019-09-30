@@ -39,13 +39,14 @@ def src_wiener_coords(sim, mean_vol, eig_vols, lambdas=None, noise_var=0, batch_
 
     for i in range(0, sim.n, batch_size):
         ims = sim.images(i, batch_size).asnumpy()
-        batch_n = ims.shape[-1]
+        batch_n = ims.shape[0]
         ims -= sim.vol_forward(mean_vol, i, batch_n)
 
         Qs, Rs = qr_vols_forward(sim, i, batch_n, eig_vols, k)
 
         Q_vecs = mat_to_vec(Qs)
-        im_vecs = mat_to_vec(ims)
+        # TODO-AXIS
+        im_vecs = mat_to_vec(ims.transpose((1, 2, 0)))
 
         for j in range(batch_n):
             im_coords = Q_vecs[:, :, j].T @ im_vecs[:, j]
@@ -70,7 +71,8 @@ def qr_vols_forward(sim, s, n, vols, k):
     """
     ims = np.zeros((sim.L, sim.L, n, k), dtype=vols.dtype)
     for ell in range(k):
-        ims[:, :, :, ell] = sim.vol_forward(vols[:, :, :, ell], s, n)
+        # TODO-AXIS
+        ims[:, :, :, ell] = sim.vol_forward(vols[:, :, :, ell], s, n).transpose((1, 2, 0))
 
     ims = np.swapaxes(ims, 2, 3)
     Q_vecs = np.zeros((sim.L**2, k, n), dtype=vols.dtype)
