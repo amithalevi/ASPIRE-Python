@@ -9,7 +9,7 @@ from aspire.volume import im_backproject, vol_project
 
 from aspire.estimation.noise import WhiteNoiseEstimator
 from aspire.utils import ensure
-from aspire.utils.coor_trans import grid_2d, angles_to_rots, rots_to_angles
+from aspire.utils.coor_trans import grid_2d
 from aspire.io.starfile import StarFile, StarFileBlock
 
 logger = logging.getLogger(__name__)
