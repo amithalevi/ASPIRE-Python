@@ -2,6 +2,7 @@ import os.path
 import logging
 import numpy as np
 import pandas as pd
+from scipy.spatial.transform import Rotation as R
 
 from aspire.image import Image
 from aspire.volume import im_backproject, vol_project
@@ -118,7 +119,14 @@ class ImageSource:
         """
         :return: Rotation angles in radians, as a n x 3 array
         """
-        return np.deg2rad(self.get_metadata(['_angle_0', '_angle_1', '_angle_2']))
+        return self._rotations.as_euler()
+
+    @property
+    def rots(self):
+        """
+        :return: Rotation matrices as a n x 3 x 3 array
+        """
+        return self._rotations.as_dcm()
 
     @angles.setter
     def angles(self, values):
@@ -127,15 +135,18 @@ class ImageSource:
         :param values: Rotation angles in radians, as a n x 3 array
         :return: None
         """
+        self._rotations = R.from_euler('ZYZ', values)
         self.set_metadata(['_angle_0', '_angle_1', '_angle_2'], np.rad2deg(values))
-
-    @property
-    def rots(self):
-        return angles_to_rots(self.angles)
 
     @rots.setter
     def rots(self, values):
-        self.angles = rots_to_angles(values)
+        """
+        Set rotation matrices
+        :param values: Rotation matrices as a n x 3 x 3 array
+        :return: None
+        """
+        self._rotations = R.from_dcm(values)
+        self.set_metadata(['_angle_0', '_angle_1', '_angle_2'], self._rotations.as_euler('ZYZ', degrees=True))
 
     def set_metadata(self, metadata_fields, values, indices=None):
         """
