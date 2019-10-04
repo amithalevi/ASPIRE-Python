@@ -39,7 +39,6 @@ class Covar3DTestCase(TestCase):
     def tearDown(self):
         pass
 
-    @pytest.mark.expensive
     def testCovar3D(self):
         covar_est = self.covar_estimator_with_preconditioner.estimate(self.mean_est, self.noise_variance)
 

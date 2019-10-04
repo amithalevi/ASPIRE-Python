@@ -64,6 +64,7 @@ class ImageSource:
             self._metadata = pd.DataFrame([], index=pd.RangeIndex(self.n))
         else:
             self._metadata = metadata
+            self._rotations = R.from_euler('ZYZ', self.get_metadata(['_angle_0', '_angle_1', '_angle_2']), degrees=True)
 
     @property
     def states(self):
@@ -240,19 +241,24 @@ class ImageSource:
         if indices is None:
             indices = np.arange(start, min(start + num, self.n))
 
+        logger.info(f'Loading {len(indices)} images ({min(indices)}-{max(indices)})')
         if self._im is not None:
             im = Image(self._im[:, :, indices])
         else:
             im = self._images(start=start, num=num, indices=indices, *args, **kwargs)
+            if self.L < im.res:
+                im = im.downsample(self.L)
+
+        logger.info(f'Loaded {len(indices)} images')
 
         return im
 
-    def set_max_resolution(self, max_L):
+    def downsample(self, max_L):
         ensure(max_L <= self.L, "Max desired resolution should be less than the current resolution")
         logger.info(f'Setting max. resolution of source = {max_L}')
-        self.L = max_L
+        ds_factor = self.L / max_L
 
-        ds_factor = self._L / max_L
+        self.L = max_L
         self.filters = [f.scale(ds_factor) for f in self.filters]
         self.offsets /= ds_factor
 
@@ -314,14 +320,13 @@ class ImageSource:
         :return: The images obtained from volume by projecting, applying CTFs, translating, and multiplying by the
             amplitude.
         """
+        logger.info('Start vol_forward')
         all_idx = np.arange(start, min(start + num, self.n))
         im = vol_project(vol, self.rots[all_idx, :, :])
-
         im = self.eval_filters(im, start, num)
-
         im = Image(im).shift(self.offsets[all_idx, :]).asnumpy()
-
         im *= np.broadcast_to(self.amplitudes[all_idx], (self.L, self.L, len(all_idx)))
+        logger.info('End vol_forward')
 
         return im
 

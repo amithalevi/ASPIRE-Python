@@ -6,6 +6,7 @@ from scipy.sparse.linalg import LinearOperator
 from scipy.linalg import norm
 from tqdm import tqdm
 from functools import partial
+from concurrent import futures
 
 from aspire import config
 from aspire.volume import rotated_grids
@@ -157,14 +158,25 @@ class CovarianceEstimator(Estimator):
         for i in range(0, self.n, self.batch_size):
             im = self.src.images(i, self.batch_size).asnumpy()
             batch_n = im.shape[-1]
+            logger.info(f'Applying adjoint mappings to {batch_n} images ({i}-..)')
+
             im_centered = im - self.src.vol_forward(mean_vol, i, self.batch_size)
-
             im_centered_b = np.zeros((self.L, self.L, self.L, batch_n), dtype=self.as_type)
-            for j in range(batch_n):
-                im_centered_b[:, :, :, j] = self.src.im_backward(im_centered[:, :, j], i+j)
-            im_centered_b = vol_to_vec(im_centered_b)
 
+            n_workers = min(config.covar.src_backward_nprocesses, batch_n)
+            with futures.ProcessPoolExecutor(n_workers) as executor:
+                to_do_map = {}
+                for j in range(batch_n):
+                    future = executor.submit(self.src.im_backward, im_centered[:, :, j], i+j)
+                    to_do_map[future] = j
+
+                for future in futures.as_completed(to_do_map):
+                    im_centered_b[:, :, :, to_do_map[future]] = future.result()
+
+            im_centered_b = vol_to_vec(im_centered_b)
             covar_b += vecmat_to_volmat(im_centered_b @ im_centered_b.T) / self.n
+
+            logger.info('Adjoint mappings complete')
 
         covar_b_coeff = self.basis.mat_evaluate_t(covar_b)
         return self._shrink(covar_b_coeff, noise_variance, shrink_method)

@@ -53,7 +53,7 @@ class RelionSource(ImageSource):
     }
 
     @classmethod
-    def starfile2df(cls, filepath, data_folder=None, max_rows=np.inf):
+    def starfile2df(cls, filepath, data_folder=None, max_rows=None):
         if data_folder is not None:
             if not os.path.isabs(data_folder):
                 data_folder = os.path.join(os.path.dirname(filepath), data_folder)
@@ -77,9 +77,12 @@ class RelionSource(ImageSource):
         # Note that os.path.join works as expected when the second argument is an absolute path itself
         df['__mrc_filepath'] = df['__mrc_filename'].apply(lambda filename: os.path.join(data_folder, filename))
 
-        return df.iloc[:max_rows]
+        if max_rows is None:
+            return df
+        else:
+            return df.iloc[:max_rows]
 
-    def __init__(self, filepath, data_folder=None, pixel_size=1, B=0, n_workers=-1, max_rows=np.inf):
+    def __init__(self, filepath, data_folder=None, pixel_size=1, B=0, n_workers=-1, max_rows=None):
         """
         Load STAR file at given filepath
         :param filepath: Absolute or relative path to STAR file
@@ -90,7 +93,7 @@ class RelionSource(ImageSource):
         :param n_workers: Number of threads to spawn to read referenced .mrcs files (Default -1 to auto detect)
         :param max_rows: Maximum number of rows in STAR file to read.
             Note that this refers to the max number of images to load, not the max. number of .mrcs files (which may be
-            equal to or less than the number of images).
+            equal to or less than the number of images). If None, all rows are read.
         """
         logger.debug(f'Creating ImageSource from STAR file at path {filepath}')
 
@@ -103,6 +106,7 @@ class RelionSource(ImageSource):
         n = len(metadata)
         if n == 0:
             raise RuntimeError('No mrcs files found for starfile!')
+        logger.debug(f'Total Images = {n}')
 
         # Peek into the first image and populate some attributes
         first_mrc_filepath = metadata.loc[0]['__mrc_filepath']
@@ -119,8 +123,8 @@ class RelionSource(ImageSource):
         L = shape[1]
         logger.debug(f'Image size = {L}x{L}')
 
-        # Save original image resolution
-        self._L = L
+        # Save native image resolution
+        self._original_resolution = L
 
         filter_params, filter_indices = np.unique(
             metadata[[
@@ -163,20 +167,15 @@ class RelionSource(ImageSource):
         )
 
     def __str__(self):
-        return f'RelionSource ({self.n} images of size {self.L}x{self.L})'
+        return f'RelionSource ({self.n} images of size {self._original_resolution})'
 
     def _images(self, start=0, num=np.inf, indices=None):
         if indices is None:
             indices = np.arange(start, min(start + num, self.n))
-        logger.info(f'Loading {len(indices)} images from STAR file')
 
         def load_single_mrcs(filepath, df):
             arr = mrcfile.open(filepath).data
             data = arr[df['__mrc_index'] - 1, :, :].T
-
-            if self.L < self._L:
-                data = Image(data).downsample(self.L).asnumpy()
-
             return df.index, data
 
         n_workers = self.n_workers
@@ -184,7 +183,8 @@ class RelionSource(ImageSource):
             n_workers = cpu_count() - 1
 
         df = self._metadata.loc[indices]
-        im = np.empty((self.L, self.L, len(indices)))
+        df = df.reset_index()
+        im = np.empty((self._original_resolution, self._original_resolution, len(df)))
 
         groups = df.groupby('__mrc_filepath')
         n_workers = min(n_workers, len(groups))
@@ -196,9 +196,7 @@ class RelionSource(ImageSource):
                 to_do.append(future)
 
             for future in futures.as_completed(to_do):
-                indices, data = future.result()
-                im[:, :, indices] = data
-
-        logger.info(f'Loading {len(indices)} images complete')
+                _indices, data = future.result()
+                im[:, :, _indices] = data
 
         return Image(im)
