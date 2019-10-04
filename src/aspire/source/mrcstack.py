@@ -15,4 +15,5 @@ class MrcStack(ImageSource):
     def _images(self, start=0, num=np.inf, indices=None):
         if indices is None:
             indices = np.arange(start, min(start + num, self.n))
-        return Image(self.im[:, :, indices])
+        # TODO-AXIS
+        return Image(self.im[:, :, indices].transpose((2, 0, 1)))

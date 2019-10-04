@@ -11,7 +11,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), 'saved_test_data')
 class ImageTestCase(TestCase):
     def setUp(self):
         # numpy array for top-level functions that directly expect it
-        self.im_np = misc.face(gray=True).astype('float64')[:768, :768][:, :, np.newaxis]
+        self.im_np = misc.face(gray=True).astype('float64')[:768, :768][np.newaxis, :, :]
         # Independent Image object for testing Image methods
         self.im = Image(misc.face(gray=True).astype('float64')[:768, :768])
 
@@ -31,9 +31,9 @@ class ImageTestCase(TestCase):
         im2 = _im_translate2(self.im_np, -shifts.reshape(2, 1))
         # Pure numpy 'shifting'
         # 'Shifting' an Image corresponds to a 'roll' of a numpy array - again, note the negated signs and the axes
-        im3 = np.roll(self.im.asnumpy()[:, :, 0], -shifts, axis=(0, 1))
+        im3 = np.roll(self.im.asnumpy()[0, :, :], -shifts, axis=(0, 1))
 
         self.assertTrue(np.allclose(im.asnumpy(), im1))
         self.assertTrue(np.allclose(im1, im2))
-        self.assertTrue(np.allclose(im1[:, :, 0], im3))
+        self.assertTrue(np.allclose(im1[0, :, :], im3))
 

@@ -102,7 +102,7 @@ class Simulation(ImageSource):
         if indices is None:
             indices = np.arange(start, min(start+num, self.n))
 
-        im = np.zeros((self.L, self.L, len(indices)))
+        im = np.zeros((len(indices), self.L, self.L))
 
         states = self.states[indices]
         unique_states = np.unique(states)
@@ -112,7 +112,7 @@ class Simulation(ImageSource):
             rot = self.rots[indices[idx_k], :, :]
 
             im_k = vol_project(vol_k, rot)
-            im[:, :, idx_k] = im_k
+            im[idx_k, :, :] = im_k
         return im
 
     def _images(self, start=0, num=np.inf, indices=None, apply_noise=False, clean=False):
@@ -136,7 +136,7 @@ class Simulation(ImageSource):
 
         im = self.eval_filters(im, start=start, num=num, indices=indices)
         im = Image(im).shift(self.offsets[indices, :]).asnumpy()
-        im *= np.broadcast_to(self.amplitudes[indices], (self.L, self.L, len(indices)))
+        im *= self.amplitudes[indices, np.newaxis, np.newaxis]
 
         if apply_noise:
             im += self._noise_arrays(start=start, num=num, indices=indices, noise_seed=self.seed)
@@ -150,15 +150,15 @@ class Simulation(ImageSource):
         if noise_filter is None:
             noise_filter = ScalarFilter(value=1, power=0.5)
 
-        im = np.zeros((self.L, self.L, len(indices)), dtype=self.dtype)
+        im = np.zeros((len(indices), self.L, self.L), dtype=self.dtype)
 
         for idx in indices:
             random_seed = noise_seed + 191*(idx+1)
             im_s = randn(2*self.L, 2*self.L, seed=random_seed)
-            im_s = Image(im_s).filter(noise_filter)[:, :, 0]
+            im_s = Image(im_s).filter(noise_filter)[0, :, :]
             im_s = im_s[:self.L, :self.L]
 
-            im[:, :, idx-start] = im_s
+            im[idx-start, :, :] = im_s
 
         return im
 

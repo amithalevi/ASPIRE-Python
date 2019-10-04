@@ -59,12 +59,14 @@ def vol_project(vol, rot_matrices):
 
     im_f = 1./L * Plan(vol.shape, pts_rot).transform(vol)
     im_f = m_reshape(im_f, (L, L, -1))
+    # TODO-AXIS
+    im_f = im_f.transpose((2, 0, 1))
 
     if L % 2 == 0:
-        im_f[0, :, :] = 0
         im_f[:, 0, :] = 0
+        im_f[:, :, 0] = 0
 
-    im = centered_ifft2(im_f)
+    im = centered_ifft2(im_f, axes=(-2, -1))
 
     return np.real(im)
 
@@ -97,18 +99,20 @@ def im_backproject(im, rot_matrices):
     :param rot_matrices: An n-by-3-by-3 array of rotation matrices corresponding to viewing directions.
     :return: An L-by-L-by-L volumes corresponding to the sum of the backprojected images.
     """
-    L, _, n = im.shape
+    n, _, L = im.shape
     ensure(L == im.shape[1], "im must be LxLxK")
     ensure(n == rot_matrices.shape[0], "Number of rotation matrices must match the number of images")
 
     pts_rot = rotated_grids(L, rot_matrices)
     pts_rot = m_reshape(pts_rot, (3, -1))
 
-    im_f = centered_fft2(im) / (L**2)
+    im_f = centered_fft2(im, axes=(-2, -1)) / (L**2)
     if L % 2 == 0:
-        im_f[0, :, :] = 0
         im_f[:, 0, :] = 0
-    im_f = m_flatten(im_f)
+        im_f[:, :, 0] = 0
+
+    # TODO-AXIS
+    im_f = m_flatten(im_f.transpose((1, 2, 0)))
 
     plan = Plan(
         sz=(L, L, L),

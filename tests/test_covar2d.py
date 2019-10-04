@@ -61,7 +61,8 @@ class Cov2DTestCase(TestCase):
         self.filters = filters
         self.h_ctf_fb = [radial_filter2fb_mat(filt.evaluate_k, self.basis) for filt in self.filters]
 
-        self.imgs_ctf_clean = sim.eval_filters(self.imgs_clean)
+        # TODO-AXIS
+        self.imgs_ctf_clean = sim.eval_filters(self.imgs_clean.transpose((2, 0, 1))).transpose((1, 2, 0))
 
         sim.cache(self.imgs_ctf_clean)
 

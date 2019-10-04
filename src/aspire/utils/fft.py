@@ -4,61 +4,86 @@ FFT/IFFT utilities
 
 from scipy.fftpack import ifftshift, ifft, ifft2, fftshift, fft, fft2, ifftn, fftn
 
-def centered_ifft1(x):
+
+def centered_ifft1(x, axis=0):
     """
     Calculate a centered, one-dimensional inverse FFT
     :param x: The one-dimensional signal to be transformed.
-        The inverse FFT is only applied along the first dimension.
+    :param axis: The axis along with to apply the inverse FFT.
     :return: The centered inverse Fourier transform of x.
     """
-    x = ifftshift(x, 0)
-    x = ifft(x, axes=0)
-    x = fftshift(x, 0)
+    x = ifftshift(x, axes=axis)
+    x = ifft(x, axis=axis)
+    x = fftshift(x, axes=axis)
     return x
 
 
-def centered_fft1(x):
-    x = ifftshift(x, 0)
-    x = fft(x, axes=0)
-    x = fftshift(x, 0)
+def centered_fft1(x, axis=0):
+    """
+    Calculate a centered, one-dimensional FFT
+    :param x: The one-dimensional signal to be transformed.
+    :param axis: The axis along with to apply the FFT.
+    :return: The centered Fourier transform of x.
+    """
+    x = ifftshift(x, axes=axis)
+    x = fft(x, axis=axis)
+    x = fftshift(x, axes=axis)
     return x
 
-def centered_ifft2(x):
+
+def centered_ifft2(x, axes=(0, 1)):
     """
     Calculate a centered, two-dimensional inverse FFT
     :param x: The two-dimensional signal to be transformed.
-        The inverse FFT is only applied along the first two dimensions.
+    :param axes: The axes along which we apply the inverse FFT.
     :return: The centered inverse Fourier transform of x.
     """
-    x = ifftshift(ifftshift(x, 0), 1)
-    x = ifft2(x, axes=(0, 1))
-    x = fftshift(fftshift(x, 0), 1)
+    ax0, ax1 = axes
+    x = ifftshift(ifftshift(x, ax0), ax1)
+    x = ifft2(x, axes=(ax0, ax1))
+    x = fftshift(fftshift(x, ax0), ax1)
     return x
 
 
-def centered_fft2(x):
-    x = ifftshift(ifftshift(x, 0), 1)
-    x = fft2(x, axes=(0, 1))
-    x = fftshift(fftshift(x, 0), 1)
+def centered_fft2(x, axes=(0, 1)):
+    """
+    Calculate a centered, two-dimensional FFT
+    :param x: The two-dimensional signal to be transformed.
+    :param axes: The axes along which we apply the FFT.
+    :return: The centered Fourier transform of x.
+    """
+    ax0, ax1 = axes
+    x = ifftshift(ifftshift(x, ax0), ax1)
+    x = fft2(x, axes=(ax0, ax1))
+    x = fftshift(fftshift(x, ax0), ax1)
     return x
 
-def centered_ifft3(x):
+
+def centered_ifft3(x, axes=(0, 1, 2)):
     """
     Calculate a centered, three-dimensional inverse FFT
     :param x: The three-dimensional signal to be transformed.
-        The inverse FFT is only applied along the first three dimensions.
+    :param axes: The axes along which we apply the inverse FFT.
     :return: The centered inverse Fourier transform of x.
     """
-    x = ifftshift(ifftshift(ifftshift(x, 0), 1), 2)
-    x = ifftn(x, axes=(0, 1, 2))
-    x = fftshift(fftshift(fftshift(x, 0), 1), 2)
+    ax0, ax1, ax2 = axes
+    x = ifftshift(ifftshift(ifftshift(x, ax0), ax1), ax2)
+    x = ifftn(x, axes=(ax0, ax1, ax2))
+    x = fftshift(fftshift(fftshift(x, ax0), ax1), ax2)
     return x
 
 
-def centered_fft3(x):
-    x = ifftshift(ifftshift(ifftshift(x, 0), 1), 2)
-    x = fftn(x, axes=(0, 1, 2))
-    x = fftshift(fftshift(fftshift(x, 0), 1), 2)
+def centered_fft3(x, axes=(0, 1, 2)):
+    """
+    Calculate a centered, three-dimensional FFT
+    :param x: The three-dimensional signal to be transformed.
+    :param axes: The axes along which we apply the FFT.
+    :return: The centered Fourier transform of x.
+    """
+    ax0, ax1, ax2 = axes
+    x = ifftshift(ifftshift(ifftshift(x, ax0), ax1), ax2)
+    x = fftn(x, axes=(ax0, ax1, ax2))
+    x = fftshift(fftshift(fftshift(x, ax0), ax1), ax2)
     return x
 
 

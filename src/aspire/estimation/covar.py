@@ -157,9 +157,8 @@ class CovarianceEstimator(Estimator):
 
         for i in range(0, self.n, self.batch_size):
             im = self.src.images(i, self.batch_size).asnumpy()
-            batch_n = im.shape[-1]
+            batch_n = im.shape[0]
             logger.info(f'Applying adjoint mappings to {batch_n} images ({i}-..)')
-
             im_centered = im - self.src.vol_forward(mean_vol, i, self.batch_size)
             im_centered_b = np.zeros((self.L, self.L, self.L, batch_n), dtype=self.as_type)
 
@@ -167,7 +166,7 @@ class CovarianceEstimator(Estimator):
             with futures.ProcessPoolExecutor(n_workers) as executor:
                 to_do_map = {}
                 for j in range(batch_n):
-                    future = executor.submit(self.src.im_backward, im_centered[:, :, j], i+j)
+                    future = executor.submit(self.src.im_backward, im_centered[j, :, :], i+j)
                     to_do_map[future] = j
 
                 for future in futures.as_completed(to_do_map):

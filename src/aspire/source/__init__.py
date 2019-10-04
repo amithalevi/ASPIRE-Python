@@ -210,7 +210,7 @@ class ImageSource:
         for f in unique_filters:
             idx_k = np.where(self.filters[indices] == f)[0]
             if len(idx_k) > 0:
-                im[:, :, idx_k] = Image(im[:, :, idx_k]).filter(f).asnumpy()
+                im[idx_k, :, :] = Image(im[idx_k, :, :]).filter(f).asnumpy()
 
         return im
 
@@ -243,7 +243,7 @@ class ImageSource:
 
         logger.info(f'Loading {len(indices)} images ({min(indices)}-{max(indices)})')
         if self._im is not None:
-            im = Image(self._im[:, :, indices])
+            im = Image(self._im[indices, :, :])
         else:
             im = self._images(start=start, num=num, indices=indices, *args, **kwargs)
             if self.L < im.res:
@@ -297,11 +297,11 @@ class ImageSource:
         :return: An L-by-L-by-L volume containing the sum of the adjoint mappings applied to the start+num-1 images.
         """
         if im.ndim < 3:
-            im = im[:, :, np.newaxis]
-        num = im.shape[-1]
+            im = im[np.newaxis, :, :]
+        num = im.shape[0]
 
         all_idx = np.arange(start, min(start + num, self.n))
-        im *= np.broadcast_to(self.amplitudes[all_idx], (self.L, self.L, len(all_idx)))
+        im *= self.amplitudes[all_idx, np.newaxis, np.newaxis]
 
         im = Image(im).shift(-self.offsets[all_idx, :]).asnumpy()
 
@@ -325,7 +325,7 @@ class ImageSource:
         im = vol_project(vol, self.rots[all_idx, :, :])
         im = self.eval_filters(im, start, num)
         im = Image(im).shift(self.offsets[all_idx, :]).asnumpy()
-        im *= np.broadcast_to(self.amplitudes[all_idx], (self.L, self.L, len(all_idx)))
+        im *= self.amplitudes[all_idx, np.newaxis, np.newaxis]
         logger.info('End vol_forward')
 
         return im

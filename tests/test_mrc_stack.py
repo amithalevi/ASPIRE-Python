@@ -24,5 +24,5 @@ class MicrographTestCase(TestCase):
             mrc_stack = MrcStack(path)
             # Try to get a total of 5 images from our ImageSource
             image_stack = mrc_stack.images(num=5)
-            # The shape of the resulting ImageStack is 200 (height) x 200 (width) x 5 (n_images)
-            self.assertEqual(image_stack.shape, (200, 200, 5))
+            # The shape of the resulting ImageStack is 5 (n_images) x 200 (height) x 200 (width)
+            self.assertEqual(image_stack.shape, (5, 200, 200))

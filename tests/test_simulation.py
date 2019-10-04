@@ -34,13 +34,22 @@ class SimTestCase(TestCase):
             ])
         ))
 
+    def testSimulationRawProjections(self):
+        # Generate images without filters/shifts/amplitudes/noise
+        images = self.sim.images(0, 512, clean=True).asnumpy()
+        # TODO-AXIS
+        self.assertTrue(np.allclose(images, np.load(os.path.join(DATA_DIR, 'sim_clean_projections.npy')).transpose((2, 0, 1)), rtol=1e-2))
+
     def testSimulationCleanImages(self):
+        # Generate images with filters/shifts/amplitudes, but without any added noise
         images = self.sim.images(0, 512).asnumpy()
-        self.assertTrue(np.allclose(images, np.load(os.path.join(DATA_DIR, 'sim_clean_images.npy')), rtol=1e-2))
+        # TODO-AXIS
+        self.assertTrue(np.allclose(images, np.load(os.path.join(DATA_DIR, 'sim_clean_images.npy')).transpose((2, 0, 1)), rtol=1e-2))
 
     def testSimulationImages(self):
         images = self.sim.images(0, 512, apply_noise=True).asnumpy()
-        self.assertTrue(np.allclose(images, np.load(os.path.join(DATA_DIR, 'sim_images_with_noise.npy')), rtol=1e-2))
+        # TODO-AXIS
+        self.assertTrue(np.allclose(images, np.load(os.path.join(DATA_DIR, 'sim_images_with_noise.npy')).transpose((2, 0, 1)), rtol=1e-2))
 
     def testSimulationImagesShape(self):
         # The 'images' method should be tolerant of bounds - here we ask for 1000 images starting at index 1000,

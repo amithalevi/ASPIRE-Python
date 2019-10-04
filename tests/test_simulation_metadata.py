@@ -82,4 +82,4 @@ class SimTestCase(TestCase):
         for group_value, group_image in self.sim.group_by('greeting'):
             self.assertIn(group_value, ('hello', 'goodbye'))
             self.assertIsInstance(group_image, Image)
-            self.assertEqual(group_image.shape, (8, 8, 512))
+            self.assertEqual(group_image.shape, (512, 8, 8))
