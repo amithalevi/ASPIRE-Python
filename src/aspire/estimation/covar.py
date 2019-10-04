@@ -7,6 +7,7 @@ from scipy.linalg import norm
 from tqdm import tqdm
 from functools import partial
 from concurrent import futures
+from multiprocessing import cpu_count
 
 from aspire import config
 from aspire.volume import rotated_grids
@@ -154,6 +155,7 @@ class CovarianceEstimator(Estimator):
         contribution and expressed as coefficients of `basis`.
         """
         covar_b = np.zeros((self.L, self.L, self.L, self.L, self.L, self.L), dtype=self.as_type)
+        n_workers = min(config.covar.src_backward_nprocesses, cpu_count() - 1)
 
         for i in range(0, self.n, self.batch_size):
             im = self.src.images(i, self.batch_size).asnumpy()
@@ -162,15 +164,20 @@ class CovarianceEstimator(Estimator):
             im_centered = im - self.src.vol_forward(mean_vol, i, self.batch_size)
             im_centered_b = np.zeros((self.L, self.L, self.L, batch_n), dtype=self.as_type)
 
-            n_workers = min(config.covar.src_backward_nprocesses, batch_n)
-            with futures.ProcessPoolExecutor(n_workers) as executor:
-                to_do_map = {}
-                for j in range(batch_n):
-                    future = executor.submit(self.src.im_backward, im_centered[j, :, :], i+j)
-                    to_do_map[future] = j
+            n_workers = min(n_workers, batch_n)
+            if n_workers > 1:
+                logger.info(f'spawning {n_workers} workers')
+                with futures.ProcessPoolExecutor(n_workers) as executor:
+                    to_do_map = {}
+                    for j in range(batch_n):
+                        future = executor.submit(self.src.im_backward, im_centered[j, :, :], i + j)
+                        to_do_map[future] = j
 
-                for future in futures.as_completed(to_do_map):
-                    im_centered_b[:, :, :, to_do_map[future]] = future.result()
+                    for future in futures.as_completed(to_do_map):
+                        im_centered_b[:, :, :, to_do_map[future]] = future.result()
+            else:
+                for j in range(batch_n):
+                    im_centered_b[:, :, :, j] = self.src.im_backward(im_centered[j, :, :], i + j)
 
             im_centered_b = vol_to_vec(im_centered_b)
             covar_b += vecmat_to_volmat(im_centered_b @ im_centered_b.T) / self.n

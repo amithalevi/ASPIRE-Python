@@ -6,6 +6,9 @@ class Numpy:
 
     asnumpy = staticmethod(lambda x: x)
 
+    pyfftw.interfaces.cache.enable()
+    pyfftw.interfaces.cache.set_keepalive_time(5)
+
     @staticmethod
     def fft2(a, axes=(0, 1)):
         b = pyfftw.empty_aligned(a.shape, dtype='complex128')
@@ -24,4 +27,5 @@ class Numpy:
         """
         Catch-all method to to allow a straight pass-through of any attribute that is not supported above.
         """
-        return getattr(np, item)
+        item = getattr(pyfftw.interfaces.numpy_fft, item)
+        return item or getattr(np, item)
