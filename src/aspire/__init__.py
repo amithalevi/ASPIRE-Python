@@ -20,7 +20,7 @@ logging.config.dictConfig({
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "simple_formatter",
-            "level": "DEBUG",
+            "level": "INFO",
             "stream": "ext://sys.stdout"
         }
     },

@@ -15,23 +15,11 @@ random_states = []
 
 
 def m_reshape(x, new_shape):
-    # This is a somewhat round-about way of saying:
-    #   return x.reshape(new_shape, order='F')
-    # We follow this approach since numba/cupy don't support the 'order'
-    # argument, and we may want to use those decorators in the future
-    # Note that flattening is required before reshaping, because
-    if isinstance(new_shape, tuple):
-        return m_flatten(x).reshape(new_shape[::-1]).T
-    else:
-        return x
+    return x.reshape(new_shape, order='F')
 
 
 def m_flatten(x):
-    # This is a somewhat round-about way of saying:
-    #   return x.flatten(order='F')
-    # We follow this approach since numba/cupy don't support the 'order'
-    # argument, and we may want to use those decorators in the future
-    return x.T.flatten()
+    return x.flatten(order='F')
 
 
 def randi(i_max, size, seed=None):

@@ -15,4 +15,4 @@ class ConfigTest(TestCase):
         b = xp.fft2(a)
         c = xp.ifft2(b)
 
-        self.assertTrue(np.allclose(a, c))
+        self.assertTrue(np.allclose(xp.asnumpy(a), xp.asnumpy(c)))

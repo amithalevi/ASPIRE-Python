@@ -111,31 +111,32 @@ class FourierKernel(Kernel):
 
         # Note from MATLAB code:
         # Order is important here.  It's about 20% faster to run from 1 through 6 compared with 6 through 1.
-        x = xp.fft(x, N_ker, 0, overwrite_input=True)
-        x = xp.fft(x, N_ker, 1, overwrite_input=True)
-        x = xp.fft(x, N_ker, 2, overwrite_input=True)
-        x = xp.fft(x, N_ker, 3, overwrite_input=True)
-        x = xp.fft(x, N_ker, 4, overwrite_input=True)
-        x = xp.fft(x, N_ker, 5, overwrite_input=True)
+        x = xp.array(x)
+        x = xp.fft.fft(x, N_ker, 0)
+        x = xp.fft.fft(x, N_ker, 1)
+        x = xp.fft.fft(x, N_ker, 2)
+        x = xp.fft.fft(x, N_ker, 3)
+        x = xp.fft.fft(x, N_ker, 4)
+        x = xp.fft.fft(x, N_ker, 5)
 
-        x *= kernel_f
+        x *= xp.array(kernel_f)
 
-        x = xp.ifft(x, None, 5, overwrite_input=True)
+        x = xp.fft.ifft(x, None, 5)
         x = x[:, :, :, :, :, :N]
-        x = xp.ifft(x, None, 4, overwrite_input=True)
+        x = xp.fft.ifft(x, None, 4)
         x = x[:, :, :, :, :N, :]
-        x = xp.ifft(x, None, 3, overwrite_input=True)
+        x = xp.fft.ifft(x, None, 3)
         x = x[:, :, :, :N, :, :]
-        x = xp.ifft(x, None, 2, overwrite_input=True)
+        x = xp.fft.ifft(x, None, 2)
         x = x[:, :, :N, :, :, :]
-        x = xp.ifft(x, None, 1, overwrite_input=True)
+        x = xp.fft.ifft(x, None, 1)
         x = x[:, :N, :, :, :, :]
-        x = xp.ifft(x, None, 0, overwrite_input=True)
+        x = xp.fft.ifft(x, None, 0)
         x = x[:N, :, :, :, :, :]
 
-        x = np.real(x)
+        x = xp.real(x)
 
-        return x
+        return xp.asnumpy(x)
 
     def toeplitz(self, L=None):
         """

@@ -4,7 +4,9 @@ import pyfftw
 
 class Numpy:
 
+    array = staticmethod(lambda x: x)
     asnumpy = staticmethod(lambda x: x)
+    fft = pyfftw.interfaces.numpy_fft
 
     pyfftw.interfaces.cache.enable()
     pyfftw.interfaces.cache.set_keepalive_time(5)
@@ -27,5 +29,4 @@ class Numpy:
         """
         Catch-all method to to allow a straight pass-through of any attribute that is not supported above.
         """
-        item = getattr(pyfftw.interfaces.numpy_fft, item)
-        return item or getattr(np, item)
+        return getattr(np, item)
