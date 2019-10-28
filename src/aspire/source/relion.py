@@ -68,8 +68,8 @@ class RelionSource(ImageSource):
 
         # Rename fields to standard notation
         reverse_metadata_aliases = {v: k for k, v in cls._metadata_aliases.items()}
-
         df = df.rename(reverse_metadata_aliases, axis=1)
+
         _index, df['__mrc_filename'] = df['_image_name'].str.split('@', 1).str
         df['__mrc_index'] = pd.to_numeric(_index)
 
@@ -82,7 +82,7 @@ class RelionSource(ImageSource):
         else:
             return df.iloc[:max_rows]
 
-    def __init__(self, filepath, data_folder=None, pixel_size=1, B=0, n_workers=-1, max_rows=None):
+    def __init__(self, filepath, data_folder=None, pixel_size=1, B=0, n_workers=-1, max_rows=None, memory=None):
         """
         Load STAR file at given filepath
         :param filepath: Absolute or relative path to STAR file
@@ -94,6 +94,8 @@ class RelionSource(ImageSource):
         :param max_rows: Maximum number of rows in STAR file to read.
             Note that this refers to the max number of images to load, not the max. number of .mrcs files (which may be
             equal to or less than the number of images). If None, all rows are read.
+        :param memory: str or None
+            The path of the base directory to use as a data store or None. If None is given, no caching is done.
         """
         logger.debug(f'Creating ImageSource from STAR file at path {filepath}')
 
@@ -163,7 +165,8 @@ class RelionSource(ImageSource):
             L=L,
             n=n,
             dtype=dtype,
-            metadata=metadata
+            metadata=metadata,
+            memory=memory
         )
 
     def __str__(self):

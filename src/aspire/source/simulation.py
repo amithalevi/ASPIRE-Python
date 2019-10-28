@@ -14,7 +14,7 @@ from aspire.utils.matrix import anorm, acorr, ainner, vol_to_vec, vec_to_vol, ve
 
 class Simulation(ImageSource):
     def __init__(self, L=8, n=1024, states=None, filters=None, offsets=None, amplitudes=None, dtype='single', C=2,
-                 angles=None, seed=0):
+                 angles=None, seed=0, memory=None):
         """
         A Cryo-EM simulation
         Other than the base class attributes, it has:
@@ -22,7 +22,7 @@ class Simulation(ImageSource):
         :param C: The number of distinct volumes
         :param angles: A 3-by-n array of rotation angles
         """
-        super().__init__(L=L, n=n, dtype=dtype)
+        super().__init__(L=L, n=n, dtype=dtype, memory=memory)
 
         offsets = offsets or L / 16 * randn(2, n, seed=seed).T
         if amplitudes is None:
@@ -161,6 +161,12 @@ class Simulation(ImageSource):
             im[idx-start, :, :] = im_s
 
         return im
+
+    def downsample(self, max_L):
+        super().downsample(max_L)
+        ds_factor = self.L / max_L
+        self.filters = [f.scale(ds_factor) for f in self.filters]
+        self.offsets /= ds_factor
 
     def vol_coords(self, mean_vol=None, eig_vols=None):
         """

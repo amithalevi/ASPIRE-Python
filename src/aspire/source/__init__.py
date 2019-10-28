@@ -10,6 +10,7 @@ from aspire.estimation.noise import WhiteNoiseEstimator
 from aspire.utils import ensure
 from aspire.utils.coor_trans import grid_2d
 from aspire.io.starfile import StarFile, StarFileBlock
+from aspire.source.xform import DownSample, Filter, Pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class ImageSource:
     # Class Attributes that can be overridden by subclasses
     # ----------------------------------------------------
 
-    # Optional renaming of metadata fields, used
+    # Optional renaming of metadata fields
     # These are used ONLY during serialization/deserialization (to/from StarFiles, for example).
     _metadata_aliases = {
         '_image_name':  '_rlnImageName',
@@ -44,7 +45,7 @@ class ImageSource:
     _metadata_types = {}
     # ----------------------------------------------------
 
-    def __init__(self, L, n, dtype='double', metadata=None):
+    def __init__(self, L, n, dtype='double', metadata=None, memory=None):
         """
         A Cryo-EM Source object that supplies images along with other parameters for image manipulation.
 
@@ -52,6 +53,8 @@ class ImageSource:
         :param n: The total number of images available
             Note that images() may return a different number of images based on it's arguments.
         :param metadata: A Dataframe of metadata information corresponding to this ImageSource's images
+        :param memory: str or None
+            The path of the base directory to use as a data store or None. If None is given, no caching is done.
         """
         self.L = L
         self.n = n
@@ -65,6 +68,9 @@ class ImageSource:
         else:
             self._metadata = metadata
             self._rotations = R.from_euler('ZYZ', self.get_metadata(['_angle_0', '_angle_1', '_angle_2']), degrees=True)
+
+        # TODO: Tie the concepts of metadata/transformer Pipeline
+        self.pipeline = Pipeline(memory=memory)
 
     @property
     def states(self):
@@ -246,9 +252,11 @@ class ImageSource:
             im = Image(self._im[indices, :, :])
         else:
             im = self._images(start=start, num=num, indices=indices, *args, **kwargs)
-            if self.L < im.res:
-                im = im.downsample(self.L)
+            # if self.L < im.res:
+            #    im = im.downsample(self.L)
 
+        logger.info(f'Applying Pipeline Transformations')
+        im = self.pipeline.forward(im)
         logger.info(f'Loaded {len(indices)} images')
 
         return im
@@ -256,11 +264,13 @@ class ImageSource:
     def downsample(self, max_L):
         ensure(max_L <= self.L, "Max desired resolution should be less than the current resolution")
         logger.info(f'Setting max. resolution of source = {max_L}')
-        ds_factor = self.L / max_L
+        # ds_factor = self.L / max_L
 
         self.L = max_L
-        self.filters = [f.scale(ds_factor) for f in self.filters]
-        self.offsets /= ds_factor
+        # self.filters = [f.scale(ds_factor) for f in self.filters]
+        # self.offsets /= ds_factor
+
+        self.pipeline.add_transform(DownSample(resolution=max_L))
 
         # Invalidate images
         self._im = None
@@ -279,11 +289,13 @@ class ImageSource:
             whiten_filter.power = -0.5
 
         # Get source images and cache the whitened images
-        logger.info('Getting all images')
-        images = self.images()
-        logger.debug("Applying whitening filter to all images and caching")
-        whitened_images = Image(images[:, :, :]).filter(whiten_filter)
-        self.cache(whitened_images)
+        # logger.info('Getting all images')
+        # images = self.images()
+        # logger.debug("Applying whitening filter to all images and caching")
+        # whitened_images = Image(images[:, :, :]).filter(whiten_filter)
+        # self.cache(whitened_images)
+
+        # self.pipeline.add_transform(Filter(whiten_filter))
 
         # TODO: Multiplying every row of self.filters (which may have references to a handful of unique Filter objects)
         # will end up creating self.n unique Filter objects, most of which will be identical !

@@ -184,10 +184,17 @@ class Pipeline(Xform):
     def __init__(self, xforms=[], memory=None):
         self.xforms = xforms
         self.memory = memory
+        self._register_xforms_changed()
 
-        resolution = min(*[xform.resolution for xform in xforms])
+    def _register_xforms_changed(self):
+        if len(self.xforms) > 0:
+            self.resolution = min(np.inf, *[xform.resolution for xform in self.xforms])
+        else:
+            self.resolution = np.inf
 
-        Xform.__init__(self, resolution=resolution)
+    def add_transform(self, xform):
+        self.xforms.append(xform)
+        self._register_xforms_changed()
 
     def _forward(self, im, indices):
 
