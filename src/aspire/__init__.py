@@ -1,5 +1,6 @@
 from .version import version as __version__
 
+import importlib
 from importlib_resources import read_text
 import logging.config
 
