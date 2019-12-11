@@ -31,7 +31,7 @@ class FakeKV:
         assert self.alpha_one.shape == self.alpha_two.shape == self.beta.shape == (L, L, L)
 
     def generate(self, angle, shift):
-        vol = ndimage.rotate(self.alpha_two,angle,(1,2),False) + _stretch_fakekv_middle_bottom(self.alpha_one + self.beta,shift)
+        vol = ndimage.rotate(self.alpha_two,angle,(1,2),reshape=False,order=1) + _stretch_fakekv_middle_bottom(self.alpha_one + self.beta,shift)
         return vol
 
 def _download_fakekv():
@@ -49,12 +49,12 @@ def _stretch_fakekv_middle_bottom(vol,shift):
     #Note!  We change the entries from Z_START to Z_END, but would copy the other ones over unaltered.  So we're doing vol.copy() and then changing the relevant ones rather than initializing to zeroes and then copying over everything as appropriate
     out_vol = vol.copy()
 
-    Z_START = 15
-    Z_END = 54
+    Z_START = 16
+    Z_END = 55
 
     for z in range(Z_START, Z_END):
-        shift_amount = ((Z_END - z) / (Z_END - Z_START))**2
-        out_vol[z,:,:] = ndimage.shift(vol[z,:,:], (shift_y*shift_amount, shift_x*shift_amount))
+        shift_amount = ((Z_END - 1 - z) / (Z_END - Z_START - 1))**2
+        out_vol[z-1,:,:] = ndimage.shift(vol[z-1,:,:], (shift_y*shift_amount, shift_x*shift_amount),order=1)
     
     return out_vol
 
