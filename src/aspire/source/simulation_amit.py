@@ -1,0 +1,339 @@
+ import numpy as np
+from scipy.linalg import qr, eigh
+
+from aspire.source import ImageSource
+from aspire.utils.filters import ScalarFilter
+from aspire.image import Image
+from aspire.volume import vol_project
+from aspire.utils import ensure
+from aspire.utils.matlab_compat import Random
+from aspire.utils.coor_trans import grid_3d, uniform_random_angles
+from aspire.utils.matlab_compat import rand, randi, randn
+from aspire.utils.matrix import anorm, acorr, ainner, vol_to_vec, vec_to_vol, vecmat_to_volmat, make_symmat
+
+
+class Simulation(ImageSource):
+    def __init__(self, L=8, n=1024, states=None, filters=None, offsets=None, amplitudes=None, dtype='single', C = 2,
+                 angles=None, seed=0):
+        """
+        A Cryo-EM simulation
+        Other than the base class attributes, it has:
+
+        :param C: The number of distinct volumes
+        :param angles: A 3-by-n array of rotation angles
+        """
+        super().__init__(L=L, n=n, dtype=dtype)
+
+        offsets = offsets or L / 16 * randn(2, n, seed=seed).T
+        if amplitudes is None:
+            min_, max_ = 2./3, 3./2
+            amplitudes = min_ + rand(n, seed=seed) * (max_ - min_)
+        states = states or randi(C, n, seed=seed)
+        angles = angles or uniform_random_angles(n, seed=seed)
+
+        self.states = states
+        if filters is not None:
+            self.filters = np.take(filters, randi(len(filters), n, seed=seed) - 1)
+        else:
+            self.filters = None
+        self.offsets = offsets
+        self.amplitudes = amplitudes
+        self.angles = angles
+        self.C = C
+        self.vols = self._gaussian_blob_vols(L=self.L, C=self.C, seed=seed)
+        self.seed = seed
+
+    def _gaussian_blob_vols(self, L=8, C=2, K=16, alpha=1, seed=None):
+        """
+        Generate Gaussian blob volumes
+        :param L: The size of the volumes
+        :param C: The number of volumes to generate
+        :param K: The number of blobs
+        :param alpha: A scale factor of the blob widths
+
+        :return: A volume array of size L x L x L x C containing the C Gaussian blob volumes.
+        """
+
+        def gaussian_blobs(K, alpha):
+            Q = np.zeros(shape=(3, 3, K)).astype(self.dtype)
+            D = np.zeros(shape=(3, 3, K)).astype(self.dtype)
+            mu = np.zeros(shape=(3, K)).astype(self.dtype)
+
+            for k in range(K):
+                V = randn(3, 3).astype(self.dtype) / np.sqrt(3)
+                Q[:, :, k] = qr(V)[0]
+                D[:, :, k] = alpha ** 2 / 16 * np.diag(np.sum(abs(V) ** 2, axis=0))
+                mu[:, k] = 0.5 * randn(3) / np.sqrt(3)
+
+            return Q, D, mu
+
+        with Random(seed):
+            vols = np.zeros(shape=(L, L, L, C)).astype(self.dtype)
+            for k in range(C):
+                Q, D, mu = gaussian_blobs(K, alpha)
+                vols[:, :, :, k] = self.eval_gaussian_blobs(L, Q, D, mu)
+            return vols
+
+    def eval_gaussian_blobs(self, L, Q, D, mu):
+        g = grid_3d(L)
+        coords = np.array([g['x'].flatten(), g['y'].flatten(), g['z'].flatten()])
+
+        K = Q.shape[-1]
+        vol = np.zeros(shape=(1, coords.shape[-1])).astype(self.dtype)
+
+        for k in range(K):
+            coords_k = coords - mu[:, k, np.newaxis]
+            coords_k = Q[:, :, k] / np.sqrt(np.diag(D[:, :, k])) @ Q[:, :, k].T @ coords_k
+
+            vol += np.exp(-0.5 * np.sum(np.abs(coords_k)**2, axis=0))
+
+        vol = np.reshape(vol, g['x'].shape)
+
+        return vol
+
+    def clean_images(self, start=0, num=np.inf, indices=None):
+        """
+        Return images without applying filters/shifts/amplitudes/noise
+        :param start: start index (0-indexed) of the start image to return
+        :param num: Number of images to return. If None, *all* images are returned.
+        :param indices: A numpy array of image indices. If specified, start and num are ignored.
+        :return: An ndarray of shape (L, L, num), L being the size of each image.
+        """
+        if indices is None:
+            indices = np.arange(start, min(start+num, self.n))
+
+        im = np.zeros((self.L, self.L, len(indices)))
+
+        states = self.states[indices]
+        unique_states = np.unique(states)
+        for k in unique_states:
+            vol_k = self.vols[:, :, :, k-1]
+            idx_k = np.where(states == k)[0]
+            rot = self.rots[indices[idx_k], :, :]
+
+            im_k = vol_project(vol_k, rot)
+            im[:, :, idx_k] = im_k
+        return im
+
+    def _images(self, start=0, num=np.inf, indices=None, apply_noise=False, clean=False):
+        """
+        Return images from the source.
+        :param start: start index (0-indexed) of the start image to return
+        :param num: Number of images to return. If None, *all* images are returned.
+        :param indices: A numpy array of image indices. If specified, start and num are ignored.
+        :param apply_noise: A boolean indicating whether we should apply noise to the generated images
+        :param clean: A boolean indicating whether to return images without filters/shifts/amplitudes/noise applied.
+            If True, the apply_noise parameter is ignored.
+        :return: An Image of shape (L, L, num), L being the size of each image.
+        """
+        if indices is None:
+            indices = np.arange(start, min(start + num, self.n))
+
+        im = self.clean_images(start=start, num=num, indices=indices)
+
+        if clean:
+            return Image(im)
+
+        im = self.eval_filters(im, start=start, num=num, indices=indices)
+        im = Image(im).shift(self.offsets[indices, :]).asnumpy()
+        im *= np.broadcast_to(self.amplitudes[indices], (self.L, self.L, len(indices)))
+
+        if apply_noise:
+            im += self._noise_arrays(start=start, num=num, indices=indices, noise_seed=self.seed)
+
+        return Image(im)
+
+    def _noise_arrays(self, start=0, num=np.inf, indices=None, noise_seed=0, noise_filter=None):
+        if indices is None:
+            indices = np.arange(start, min(start + num, self.n))
+
+        if noise_filter is None:
+            noise_filter = ScalarFilter(value=1, power=0.5)
+
+        im = np.zeros((self.L, self.L, len(indices)), dtype=self.dtype)
+
+        for idx in indices:
+            random_seed = noise_seed + 191*(idx+1)
+            im_s = randn(2*self.L, 2*self.L, seed=random_seed)
+            im_s = Image(im_s).filter(noise_filter)[:, :, 0]
+            im_s = im_s[:self.L, :self.L]
+
+            im[:, :, idx-start] = im_s
+
+        return im
+
+    def vol_coords(self, mean_vol=None, eig_vols=None):
+        """
+        Coordinates of simulation volumes in a given basis
+        :param mean_vol: A mean volume in the form of an L-by-L-by-L array (default `mean_true`).
+        :param eig_vols: A set of eigenvolumes in an L-by-L-by-L-by-K array (default `eigs`).
+        :return:
+        """
+        if mean_vol is None:
+            mean_vol = self.mean_true()
+        if eig_vols is None:
+            eig_vols = self.eigs()[0]
+
+        vols = self.vols - np.expand_dims(mean_vol, 3)
+        coords = vol_to_vec(eig_vols).T @ vol_to_vec(vols)
+        res = vols - vec_to_vol(vol_to_vec(eig_vols) @ coords)
+        res_norms = np.diag(anorm(res, (0, 1, 2)))
+        res_inners = vol_to_vec(mean_vol).T @ vol_to_vec(res)
+
+        return coords.squeeze(), res_norms, res_inners
+
+    def mean_true(self):
+        return np.mean(self.vols, 3)
+
+    def covar_true(self):
+        eigs_true, lamdbas_true = self.eigs()
+        eigs_true = vol_to_vec(eigs_true)
+        covar_true = eigs_true @ lamdbas_true @ eigs_true.T
+        covar_true = vecmat_to_volmat(covar_true)
+
+        return covar_true
+
+    def eigs(self):
+        """
+        Eigendecomposition of volume covariance matrix of simulation
+        :return: A 2-tuple:
+            eigs_true: The eigenvectors of the volume covariance matrix in the form of an L-by-L-by-L-by-(C-1) array,
+            where C is the number of distinct states in the simulation
+            lambdas_true: The eigenvalues of the covariance matrix in the form of a (C-1)-by-(C-1) diagonal matrix.
+        """
+        C = self.C
+        vols_c = self.vols - np.expand_dims(self.mean_true(), 3)
+        p = np.ones(C) / C
+        vols_c = vol_to_vec(vols_c)
+        Q, R = qr(vols_c, mode='economic')
+
+        # Rank is at most C-1, so remove last vector
+        Q = Q[:, :-1]
+        R = R[:-1, :]
+
+        w, v = eigh(make_symmat(R @ np.diag(p) @ R.T))
+        eigs_true = vec_to_vol(Q @ v)
+
+        # Arrange in descending order (flip column order in eigenvector matrix)
+        w = w[::-1]
+        eigs_true = np.flip(eigs_true, axis=-1)
+
+        return eigs_true, np.diag(w)
+
+    # TODO: Too many eval_* methods doing similar things - encapsulate somehow?
+
+    def eval_mean(self, mean_est):
+        mean_true = self.mean_true()
+        return self.eval_vol(mean_true, mean_est)
+
+    def eval_vol(self, vol_true, vol_est):
+        norm_true = anorm(vol_true)
+
+        err = anorm(vol_true - vol_est)
+        rel_err = err / norm_true
+        corr = acorr(vol_true, vol_est)
+
+        return {
+            'err': err,
+            'rel_err': rel_err,
+            'corr': corr
+        }
+
+    def eval_covar(self, covar_est):
+        covar_true = self.covar_true()
+        return self.eval_volmat(covar_true, covar_est)
+
+    def eval_volmat(self, volmat_true, volmat_est):
+        """
+        Evaluate volume matrix estimation accuracy
+        :param volmat_true: The true volume matrices in the form of an L-by-L-by-L-by-L-by-L-by-L-by-K array.
+        :param volmat_est: The estimated volume matrices in the same form.
+        :return:
+        """
+        norm_true = anorm(volmat_true)
+
+        err = anorm(volmat_true - volmat_est)
+        rel_err = err / norm_true
+        corr = acorr(volmat_true, volmat_est)
+
+        return {
+            'err': err,
+            'rel_err': rel_err,
+            'corr': corr
+        }
+
+    def eval_eigs(self, eigs_est, lambdas_est):
+        """
+        Evaluate covariance eigendecomposition accuracy
+        :param eigs_est: The estimated volume eigenvectors in an L-by-L-by-L-by-K array.
+        :param lambdas_est: The estimated eigenvalues in a K-by-K diagonal matrix (default `diag(ones(K, 1))`).
+        :return:
+        """
+        eigs_true, lambdas_true = self.eigs()
+
+        B = vol_to_vec(eigs_est).T @ vol_to_vec(eigs_true)
+        norm_true = anorm(lambdas_true)
+        norm_est = anorm(lambdas_est)
+
+        inner = ainner(B @ lambdas_true, lambdas_est @ B)
+        err = np.sqrt(norm_true ** 2 + norm_est ** 2 - 2 * inner)
+        rel_err = err / norm_true
+        corr = inner / (norm_true * norm_est)
+
+        # TODO: Determine Principal Angles and return as a dict value
+
+        return {
+            'err': err,
+            'rel_err': rel_err,
+            'corr': corr
+        }
+
+    def eval_clustering(self, vol_idx):
+        """
+        Evaluate clustering estimation
+        :param vol_idx: Indexes of the volumes determined (0-indexed)
+        :return: Accuracy [0-1] in terms of proportion of correctly assigned labels
+        """
+        ensure(len(vol_idx) == self.n, f'Need {self.n} vol indexes to evaluate clustering')
+        # Remember that `states` is 1-indexed while vol_idx is 0-indexed
+        correctly_classified = np.sum(self.states-1 == vol_idx)
+
+        return correctly_classified / self.n
+
+    def eval_coords(self, mean_vol, eig_vols, coords_est):
+        """
+        Evaluate coordinate estimation
+        :param mean_vol: A mean volume in the form of an L-by-L-by-L array.
+        :param eig_vols: A set of eigenvolumes in an L-by-L-by-L-by-K array.
+        :param coords_est: The estimated coordinates in the affine space defined centered at `mean_vol` and spanned
+            by `eig_vols`.
+        :return:
+        """
+        coords_true, res_norms, res_inners = self.vol_coords(mean_vol, eig_vols)
+
+        # 0-indexed states vector
+        states = self.states - 1
+
+        coords_true = coords_true[states]
+        res_norms = res_norms[states]
+        res_inners = res_inners[states]
+
+        mean_eigs_inners = np.asscalar(vol_to_vec(mean_vol).T @ vol_to_vec(eig_vols))
+        coords_err = coords_true - coords_est
+
+        err = np.hypot(res_norms, coords_err)
+        mean_vol_norm2 = anorm(mean_vol) ** 2
+        norm_true = np.sqrt(coords_true**2 + mean_vol_norm2 + 2*res_inners + 2*mean_eigs_inners * coords_true)
+        norm_true = np.hypot(res_norms, norm_true)
+
+        rel_err = err / norm_true
+        inner = mean_vol_norm2 + mean_eigs_inners * (coords_true + coords_est) + coords_true * coords_est + res_inners
+        norm_est = np.sqrt(coords_est**2 + mean_vol_norm2 + 2*mean_eigs_inners*coords_est)
+
+        corr = inner / (norm_true * norm_est)
+
+        return {
+            'err': err,
+            'rel_err': rel_err,
+            'corr': corr
+        }
